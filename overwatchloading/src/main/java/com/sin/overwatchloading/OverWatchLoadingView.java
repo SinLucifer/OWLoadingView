@@ -6,13 +6,16 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.PixelFormat;
 import android.graphics.Point;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffXfermode;
 import android.support.annotation.Nullable;
 import android.util.AttributeSet;
-import android.util.Log;
-import android.view.View;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 
-public class OverWatchLoadingView extends View {
+public class OverWatchLoadingView extends SurfaceView {
     public static final String TAG = OverWatchLoadingView.class.getSimpleName();
 
     public static final int STATE_SHOWING = 0;
@@ -23,6 +26,7 @@ public class OverWatchLoadingView extends View {
     public static final float SHOWING_SCALE = 0.6f;
 
     private Paint mPaint;
+    private Canvas canvas;
 
     private int radius;
     private int color;
@@ -33,6 +37,8 @@ public class OverWatchLoadingView extends View {
 
     private float hexagonWidth = 0;
 
+    private SurfaceHolder holder;
+
     private static boolean isFirst = true;
     private static boolean isLoop = false;
 
@@ -40,10 +46,14 @@ public class OverWatchLoadingView extends View {
         @Override
         public void run() {
 //            Log.i(TAG, "run: looping!");
-            flush();
-            invalidate();
-            if(isLoop) {
-                postDelayed(animation,10);
+            try {
+                while (isLoop) {
+                    draw();
+                    flush();
+                    Thread.sleep(10);
+                }
+            } catch (InterruptedException e) {
+                e.printStackTrace();
             }
         }
     };
@@ -75,12 +85,17 @@ public class OverWatchLoadingView extends View {
         mPaint = new Paint();
         mPaint.setAntiAlias(true);
         mPaint.setColor(color);
+
+        holder = getHolder();
+        setZOrderOnTop(true);
+        holder.setFormat(PixelFormat.TRANSPARENT);
     }
 
-    @Override
-    protected void onDraw(Canvas canvas) {
-        super.onDraw(canvas);
-
+    private void draw() {
+        canvas = holder.lockCanvas();
+        mPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
+        canvas.drawPaint(mPaint);
+        mPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_OVER));
         if (isFirst) {
             calculateCP(getWidth() / 2 ,getHeight() / 2);
             createHexagon();
@@ -91,6 +106,8 @@ public class OverWatchLoadingView extends View {
                 canvas.drawPath(hexagon[i].getHexagon(),mPaint);
             }
         }
+
+        holder.unlockCanvasAndPost(canvas);
     }
 
     @Override
@@ -165,11 +182,13 @@ public class OverWatchLoadingView extends View {
 
     public void start() {
         isLoop = true;
-        post(animation);
+        new Thread(animation).start();
     }
 
     public void stop() {
         isLoop = false;
+        createHexagon();
+        draw();
     }
 
     private class Hexagon {
@@ -182,13 +201,13 @@ public class OverWatchLoadingView extends View {
         private Point center;
         private Path hexagon;
 
-        public Hexagon(Point center) {
+        private Hexagon(Point center) {
             this.center = center;
             hexagon = new Path();
             generateHexagon();
         }
 
-        public void generateHexagon() {
+        private void generateHexagon() {
             hexagon.reset();
             hexagon.moveTo(center.x, center.y - radius * scale);
             hexagon.lineTo(center.x + hexagonWidth * scale / 2
@@ -203,7 +222,7 @@ public class OverWatchLoadingView extends View {
             hexagon.close();
         }
 
-        public float getScale() {
+        private float getScale() {
             return scale;
         }
 
@@ -211,7 +230,7 @@ public class OverWatchLoadingView extends View {
             return alpha;
         }
 
-        public void addScale() {
+        private void addScale() {
             if (scale == 1f)
                 return;
 
@@ -219,14 +238,14 @@ public class OverWatchLoadingView extends View {
             generateHexagon();
         }
 
-        public void addAlpha() {
+        private void addAlpha() {
             if (alpha == 255)
                 return;
 
             alpha = (alpha + alphaOffSet) >= 255? 255 : alpha + alphaOffSet;
         }
 
-        public void subScale() {
+        private void subScale() {
             if (scale == 0f)
                 return;
 
@@ -234,14 +253,14 @@ public class OverWatchLoadingView extends View {
             generateHexagon();
         }
 
-        public void subAlpha() {
+        private void subAlpha() {
             if (alpha == 0)
                 return;
 
             alpha = (alpha - alphaOffSet) >= 0? 0 : alpha - alphaOffSet;
         }
 
-        public Path getHexagon() {
+        private Path getHexagon() {
             return hexagon;
         }
     }
