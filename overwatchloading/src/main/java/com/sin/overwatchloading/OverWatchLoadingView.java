@@ -15,7 +15,7 @@ import android.util.AttributeSet;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
-public class OverWatchLoadingView extends SurfaceView {
+public class OverWatchLoadingView extends SurfaceView implements SurfaceHolder.Callback{
     public static final String TAG = OverWatchLoadingView.class.getSimpleName();
 
     public static final int STATE_SHOWING = 0;
@@ -41,6 +41,8 @@ public class OverWatchLoadingView extends SurfaceView {
 
     private static boolean isFirst = true;
     private static boolean isLoop = false;
+
+    private Thread drawThread;
 
     private Runnable animation = new Runnable() {
         @Override
@@ -89,25 +91,30 @@ public class OverWatchLoadingView extends SurfaceView {
         holder = getHolder();
         setZOrderOnTop(true);
         holder.setFormat(PixelFormat.TRANSPARENT);
+        holder.addCallback(this);
     }
 
     private void draw() {
-        canvas = holder.lockCanvas();
-        mPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
-        canvas.drawPaint(mPaint);
-        mPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_OVER));
-        if (isFirst) {
-            calculateCP(getWidth() / 2 ,getHeight() / 2);
-            createHexagon();
-            isFirst = false;
-        } else {
-            for (int i = 0; i < 7; i++) {
-                mPaint.setAlpha(hexagon[i].getAlpha());
-                canvas.drawPath(hexagon[i].getHexagon(),mPaint);
+        try {
+            canvas = holder.lockCanvas();
+            mPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
+            canvas.drawPaint(mPaint);
+            mPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_OVER));
+            if (isFirst) {
+                calculateCP(getWidth() / 2 ,getHeight() / 2);
+                createHexagon();
+                isFirst = false;
+            } else {
+                for (int i = 0; i < 7; i++) {
+                    mPaint.setAlpha(hexagon[i].getAlpha());
+                    canvas.drawPath(hexagon[i].getHexagon(),mPaint);
+                }
             }
-        }
 
-        holder.unlockCanvasAndPost(canvas);
+            holder.unlockCanvasAndPost(canvas);
+        } catch (NullPointerException e) {
+            e.printStackTrace();
+        }
     }
 
     @Override
@@ -182,13 +189,32 @@ public class OverWatchLoadingView extends SurfaceView {
 
     public void start() {
         isLoop = true;
-        new Thread(animation).start();
+        if (drawThread == null)
+            drawThread = new Thread(animation);
+
+        drawThread.start();
     }
 
     public void stop() {
         isLoop = false;
         createHexagon();
         draw();
+        drawThread.interrupt();
+    }
+
+    @Override
+    public void surfaceCreated(SurfaceHolder holder) {
+
+    }
+
+    @Override
+    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+
+    }
+
+    @Override
+    public void surfaceDestroyed(SurfaceHolder holder) {
+        drawThread.interrupt();
     }
 
     private class Hexagon {
